@@ -1,0 +1,221 @@
+@host = http://localhost:5206
+
+### ===== AUTENTICACION =====
+
+### 201 - Registro (el rol lo asigna el servidor: Cliente). Cambia el correo si ya existe.
+POST {{host}}/api/auth/registro
+Content-Type: application/json
+
+{ "correo": "dueno1@vet.com", "clave": "Clave123*" }
+
+### 409 - Correo repetido (ejecutar de nuevo el registro anterior)
+POST {{host}}/api/auth/registro
+Content-Type: application/json
+
+{ "correo": "dueno1@vet.com", "clave": "Clave123*" }
+
+### 400 - Registro invalido (clave corta)
+POST {{host}}/api/auth/registro
+Content-Type: application/json
+
+{ "correo": "x@vet.com", "clave": "123" }
+
+### 401 - Login con clave incorrecta
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "recepcion@vet.com", "clave": "incorrecta" }
+
+### 401 - Login con correo inexistente (misma respuesta que la anterior)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "nadie@vet.com", "clave": "Clave123*" }
+
+### 200 - Login Cliente
+# @name loginCliente
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "cliente@vet.com", "clave": "Clave123*" }
+
+### 200 - Login Recepcionista
+# @name loginRecep
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "recepcion@vet.com", "clave": "Clave123*" }
+
+### 200 - Login Veterinario
+# @name loginVet
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "correo": "veterinario@vet.com", "clave": "Clave123*" }
+
+@tokenCliente = {{loginCliente.response.body.token}}
+@tokenRecep = {{loginRecep.response.body.token}}
+@tokenVet = {{loginVet.response.body.token}}
+
+### 401 - Perfil sin token
+GET {{host}}/api/auth/perfil
+
+### 200 - Perfil (correo y rol salen de los claims del token)
+GET {{host}}/api/auth/perfil
+Authorization: Bearer {{tokenVet}}
+
+### ===== PUBLICO =====
+
+### 200 - Listar mascotas sin token
+GET {{host}}/api/mascotas
+
+### ===== SOLO AUTENTICADO =====
+
+### 401 - Sin token
+GET {{host}}/api/mascotas/1
+
+### 200 - Cliente autenticado
+GET {{host}}/api/mascotas/1
+Authorization: Bearer {{tokenCliente}}
+
+### 404 - Mascota inexistente
+GET {{host}}/api/mascotas/99
+Authorization: Bearer {{tokenCliente}}
+
+### 200 - Citas de una mascota
+GET {{host}}/api/mascotas/1/citas
+Authorization: Bearer {{tokenCliente}}
+
+### 200 - Listar citas
+GET {{host}}/api/citas?estado=Pendiente
+Authorization: Bearer {{tokenCliente}}
+
+### ===== SOLO RECEPCIONISTA (crear/editar mascotas, agendar citas) =====
+
+### 401 - Crear mascota sin token
+POST {{host}}/api/mascotas
+Content-Type: application/json
+
+{ "nombre": "Toby", "especie": "Perro", "nombreDueno": "Pedro Gil" }
+
+### 403 - Cliente no puede crear mascotas
+POST {{host}}/api/mascotas
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{ "nombre": "Toby", "especie": "Perro", "nombreDueno": "Pedro Gil" }
+
+### 403 - Veterinario tampoco
+POST {{host}}/api/mascotas
+Content-Type: application/json
+Authorization: Bearer {{tokenVet}}
+
+{ "nombre": "Toby", "especie": "Perro", "nombreDueno": "Pedro Gil" }
+
+### 201 - Recepcionista crea mascota
+POST {{host}}/api/mascotas
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "nombre": "Toby", "especie": "Perro", "raza": "Beagle", "nombreDueno": "Pedro Gil", "telefono": "900111222" }
+
+### 409 - Mascota duplicada (repetir el POST anterior)
+POST {{host}}/api/mascotas
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "nombre": "Toby", "especie": "Perro", "nombreDueno": "Pedro Gil" }
+
+### 400 - DTO invalido
+POST {{host}}/api/mascotas
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "nombre": "", "especie": "Perro" }
+
+### 204 - Actualizar mascota (usa el Id de la mascota creada)
+PUT {{host}}/api/mascotas/6
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "nombre": "Toby", "especie": "Perro", "raza": "Labrador", "nombreDueno": "Pedro Gil", "activo": true }
+
+### 404 - Actualizar mascota inexistente
+PUT {{host}}/api/mascotas/99
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "nombre": "Toby", "especie": "Perro", "nombreDueno": "Pedro Gil" }
+
+### 201 - Agendar cita
+POST {{host}}/api/citas
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "mascotaId": 6, "fechaHora": "2031-01-01T10:00:00", "motivo": "Chequeo general", "costo": 40 }
+
+### 409 - Cita en el pasado
+POST {{host}}/api/citas
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "mascotaId": 6, "fechaHora": "2020-01-01T10:00:00", "motivo": "Chequeo general", "costo": 40 }
+
+### 403 - Veterinario no agenda citas
+POST {{host}}/api/citas
+Content-Type: application/json
+Authorization: Bearer {{tokenVet}}
+
+{ "mascotaId": 6, "fechaHora": "2031-03-01T10:00:00", "motivo": "Chequeo general", "costo": 40 }
+
+### 404 - Cita para mascota inexistente
+POST {{host}}/api/citas
+Content-Type: application/json
+Authorization: Bearer {{tokenRecep}}
+
+{ "mascotaId": 99, "fechaHora": "2031-02-01T10:00:00", "motivo": "Chequeo general", "costo": 40 }
+
+### ===== RECEPCIONISTA O VETERINARIO =====
+
+### 204 - Veterinario actualiza cita (ej. la marca atendida)
+PUT {{host}}/api/citas/6
+Content-Type: application/json
+Authorization: Bearer {{tokenVet}}
+
+{ "fechaHora": "2031-01-01T10:00:00", "motivo": "Chequeo general", "costo": 45, "estado": "Pendiente" }
+
+### 403 - Cliente no actualiza citas
+PUT {{host}}/api/citas/6
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{ "fechaHora": "2031-01-01T10:00:00", "motivo": "Chequeo general", "costo": 45, "estado": "Pendiente" }
+
+### 409 - Modificar cita ya atendida
+PUT {{host}}/api/citas/1
+Content-Type: application/json
+Authorization: Bearer {{tokenVet}}
+
+{ "fechaHora": "2031-01-02T10:00:00", "motivo": "Chequeo", "costo": 45, "estado": "Pendiente" }
+
+### ===== SOLO VETERINARIO (eliminar) =====
+
+### 403 - Recepcionista no elimina
+DELETE {{host}}/api/mascotas/6
+Authorization: Bearer {{tokenRecep}}
+
+### 409 - Eliminar mascota con citas pendientes
+DELETE {{host}}/api/mascotas/6
+Authorization: Bearer {{tokenVet}}
+
+### 204 - Eliminar cita
+DELETE {{host}}/api/citas/6
+Authorization: Bearer {{tokenVet}}
+
+### 204 - Eliminar mascota (ya sin citas pendientes)
+DELETE {{host}}/api/mascotas/6
+Authorization: Bearer {{tokenVet}}
+
+### 404 - Eliminar cita inexistente
+DELETE {{host}}/api/citas/99
+Authorization: Bearer {{tokenVet}}
